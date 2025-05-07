@@ -4,72 +4,58 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/url"
+	"log/slog"
 	"os"
 
 	"github.com/jmontroy90/autoklept/autoklept"
 )
 
 func main() {
-	cfg, err := autoklept.ParseConfig()
+	cfg, err := ParseConfig()
 	if err != nil {
 		log.Fatalf("error parsing config: %v", err)
 	}
-	//ctx, cancel := context.WithTimeout(context.Background(), cfg.Client.DeepseekTimeout)
-	//defer cancel()
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	ctx := context.Background()
-	client, err := autoklept.NewAutoKleptClient(cfg)
+	client, err := autoklept.NewAutoKleptClient(cfg.ToAutokleptConfig(), logger)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
-	var urls []*url.URL
-	for _, uStr := range cfg.Source.Urls {
-		u, err := url.Parse(uStr)
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-		urls = append(urls, u)
-	}
-	// TODO: refactor into functions
-	for _, smUrl := range cfg.Source.SitemapUrls {
-		u, err := url.Parse(smUrl)
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-		sitemapRaw, err := client.Get(ctx, u)
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-		us, err := autoklept.ExtractUrlSet([]byte(sitemapRaw))
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-		urls = append(urls, us...)
+	urls, err := client.BuildURLs(ctx, cfg.Source.Urls, cfg.Source.SitemapUrls)
+	if err != nil {
+		log.Fatalf("%v", err)
 	}
 	// TODO: basic sync.WaitGroup for concurrency
-	for i, u := range urls {
-		htmlResp, err := client.Get(ctx, u)
+	for i, url := range urls {
+		req, err := client.NewPromptRequest(ctx, buildPromptRequestInput(cfg))
 		if err != nil {
 			log.Fatalf("%v", err)
 		}
-		// TODO: configurable html pathing
-		parsedHtml, err := client.ParseHtmlAt(ctx, htmlResp, "div", "id", "SITE_CONTAINER")
+		resp, err := client.ExecPromptFor(ctx, req, url)
 		if err != nil {
 			log.Fatalf("%v", err)
 		}
-		req, err := client.NewPromptRequest(ctx, parsedHtml, cfg.Prompt)
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-		extractResp, err := client.ExecParseRequest(ctx, req)
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-		output := autoklept.ExtractResponseContent(extractResp)
 		// TODO: better file naming, extract it out?
-		if err := os.WriteFile(fmt.Sprintf("out/%d.md", i), []byte(output), 0644); err != nil {
+		if err := os.WriteFile(fmt.Sprintf("out/%s-%d.md", cfg.Output.FilePrefix, i), []byte(resp.Content), 0644); err != nil {
 			log.Fatalf("%v", err)
 		}
 	}
 
+}
+
+func buildPromptRequestInput(cfg *Config) *autoklept.PromptRequestInput {
+	var htmlFinder *autoklept.ElementNodeFinder
+	if nf := cfg.Html.NodeFinder; nf.Tag != "" && nf.AttrKey != "" && nf.AttrVal != "" {
+		htmlFinder = &autoklept.ElementNodeFinder{
+			Tag:     cfg.Html.NodeFinder.Tag,
+			AttrKey: cfg.Html.NodeFinder.AttrKey,
+			AttrVal: cfg.Html.NodeFinder.AttrVal,
+		}
+	}
+	// TODO: translation layers are interesting.
+	return &autoklept.PromptRequestInput{
+		InputTag:   cfg.Prompt.InputContentTag,
+		OutputTag:  cfg.Prompt.OutputContentTag,
+		HTMLFinder: htmlFinder,
+	}
 }

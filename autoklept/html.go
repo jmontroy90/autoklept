@@ -4,29 +4,30 @@ import (
 	"bytes"
 	"fmt"
 	"golang.org/x/net/html"
-	"io"
 	"strings"
 )
 
-const (
-	DIV_TAG = "div"
-)
-
+// ElementNodeFinder lets the user specify a particular tag to start parsing from, instead of just parsing the whole input.
+// Example: <div id="123abc">
 type ElementNodeFinder struct {
 	Tag     string
 	AttrKey string
 	AttrVal string
 }
 
-func parseHtmlByTag(htmlBody string, lookup ElementNodeFinder) (io.Reader, error) {
+func parseHtmlByTag(htmlBody string, lookup *ElementNodeFinder) (*bytes.Buffer, error) {
 	doc, err := html.Parse(strings.NewReader(htmlBody))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing html: %w", err)
 	}
-	content := findElementNode(doc, lookup)
-	var buf bytes.Buffer
-	if err = html.Render(&buf, content); err != nil {
-		return nil, fmt.Errorf("error rendering html: %w", err)
+	buf := bytes.Buffer{}
+	if lookup != nil {
+		content := findElementNode(doc, *lookup)
+		if err = html.Render(&buf, content); err != nil {
+			return nil, fmt.Errorf("error rendering html: %w", err)
+		}
+	} else {
+		buf.WriteString(htmlBody)
 	}
 	return &buf, nil
 }

@@ -7,36 +7,36 @@ import (
 )
 
 // TODO: We could parse these and recursively get all sub-sitemaps and their URLs
-type SitemapIndex struct {
-	Sitemaps []Sitemap `xml:"sitemap"`
+type sitemapIndex struct {
+	Sitemaps []sitemap `xml:"sitemap"`
 }
 
-type Sitemap struct {
+type sitemap struct {
 	Loc     string `xml:"loc"`
 	LastMod string `xml:"lastmod"`
 }
 
-type URLSet struct {
-	URLs []URL `xml:"url"`
+type urlSet struct {
+	URLs []singleURL `xml:"url"`
 }
 
-type URL struct {
+type singleURL struct {
 	Loc     string `xml:"loc"`
 	LastMod string `xml:"lastmod"`
 }
 
-func ExtractUrlSet(raw []byte) ([]*url.URL, error) {
-	var urlSet URLSet
-	if err := xml.Unmarshal(raw, &urlSet); err != nil {
+func extractUrlSet(raw []byte) ([]*url.URL, error) {
+	var us urlSet
+	if err := xml.Unmarshal(raw, &us); err != nil {
 		return nil, fmt.Errorf("error unmarshaling sitemap: %w", err)
 	}
 	var urls []*url.URL
-	for _, us := range urlSet.URLs {
-		u, err := url.Parse(us.Loc)
+	for _, u := range us.URLs {
+		up, err := url.Parse(u.Loc)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing sitemap url %s: %w", us.Loc, err)
+			return nil, fmt.Errorf("error parsing sitemap url %s: %w", u.Loc, err)
 		}
-		urls = append(urls, u)
+		urls = append(urls, up)
 	}
 	return urls, nil
 }
