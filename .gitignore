@@ -1,0 +1,6 @@
+autoklept
+.idea/
+.DS_Store
+bin/
+out/
+.env
