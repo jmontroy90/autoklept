@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"log/slog"
+	"net/url"
 	"os"
 
 	"github.com/jmontroy90/autoklept/autoklept"
@@ -15,23 +15,19 @@ func main() {
 	if err != nil {
 		log.Fatalf("error parsing config: %v", err)
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	ctx := context.Background()
-	client, err := autoklept.NewAutoKleptClient(cfg.ToAutokleptConfig(), logger)
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	urls, err := client.BuildURLs(ctx, cfg.Source.Urls, cfg.Source.SitemapUrls)
+	client := autoklept.NewClient(cfg.Client.DeepseekAPIKey, autoklept.WithTimeout(cfg.Client.DeepseekTimeout))
+	urls, err := buildURLs(ctx, cfg.Source.Urls, cfg.Source.SitemapUrls)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
 	// TODO: basic sync.WaitGroup for concurrency
-	for i, url := range urls {
+	for i, u := range urls {
 		req, err := client.NewPromptRequest(ctx, buildPromptRequestInput(cfg))
 		if err != nil {
 			log.Fatalf("%v", err)
 		}
-		resp, err := client.ExecPromptFor(ctx, req, url)
+		resp, err := client.ExecPromptFor(ctx, req, u)
 		if err != nil {
 			log.Fatalf("%v", err)
 		}
@@ -58,4 +54,23 @@ func buildPromptRequestInput(cfg *Config) *autoklept.PromptRequestInput {
 		OutputTag:  cfg.Prompt.OutputContentTag,
 		HTMLFinder: htmlFinder,
 	}
+}
+
+func buildURLs(ctx context.Context, sourceURLs, sitemapURLs []string) ([]*url.URL, error) {
+	var urls []*url.URL
+	for _, uStr := range sourceURLs {
+		u, err := url.Parse(uStr)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing source URL: %w", err)
+		}
+		urls = append(urls, u)
+	}
+	for _, smUrl := range sitemapURLs {
+		found, err := autoklept.ParseSitemapURLs(ctx, smUrl)
+		if err != nil {
+			return nil, fmt.Errorf("")
+		}
+		urls = append(urls, found...)
+	}
+	return urls, nil
 }

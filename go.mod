@@ -11,5 +11,7 @@ require (
 
 require (
 	github.com/joho/godotenv v1.5.1 // indirect
+	github.com/magefile/mage v1.15.0 // indirect
 	github.com/ollama/ollama v0.6.5 // indirect
+	github.com/urfave/cli/v3 v3.3.2 // indirect
 )

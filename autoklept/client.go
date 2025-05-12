@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -21,10 +20,8 @@ var (
 )
 
 type Client struct {
-	logger     *slog.Logger
-	cfg        *Config
-	deepseek   *deepseek.Client
-	httpClient *http.Client
+	deepseek *deepseek.Client
+	cfg      *Config
 }
 
 type Config struct {
@@ -32,13 +29,21 @@ type Config struct {
 	DeepseekTimeout time.Duration
 }
 
-func NewAutoKleptClient(cfg *Config, logger *slog.Logger) (*Client, error) {
-	return &Client{
-		cfg:        cfg,
-		logger:     logger,
-		deepseek:   deepseek.NewClient(cfg.DeepseekAPIKey),
-		httpClient: http.DefaultClient,
-	}, nil
+func NewClient(apiKey string, opts ...ClientOption) *Client {
+	c := &Client{deepseek: deepseek.NewClient(apiKey)}
+	c.cfg = &Config{DeepseekAPIKey: apiKey}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+type ClientOption func(*Client)
+
+func WithTimeout(timeout time.Duration) ClientOption {
+	return func(client *Client) {
+		client.cfg.DeepseekTimeout = timeout
+	}
 }
 
 func (c *Client) BuildURLs(ctx context.Context, sourceURLs, sitemapURLs []string) ([]*url.URL, error) {
@@ -51,11 +56,9 @@ func (c *Client) BuildURLs(ctx context.Context, sourceURLs, sitemapURLs []string
 		urls = append(urls, u)
 	}
 	for _, smUrl := range sitemapURLs {
-		found, err := c.parseSitemapURL(ctx, smUrl)
+		found, err := ParseSitemapURLs(ctx, smUrl)
 		if err != nil {
-			// TODO: I know this is opinionated but I don't to fail the whole thing...
-			c.logger.With("sitemapURL", smUrl, "error", err).Error("failed to parse sitemap; continuing processing")
-			continue
+			return nil, fmt.Errorf("")
 		}
 		urls = append(urls, found...)
 	}
@@ -92,7 +95,7 @@ func (c *Client) NewPromptRequest(ctx context.Context, reqInput *PromptRequestIn
 // ExecPromptFor executes the given prompt request for the parsed content found at `url`.
 func (c *Client) ExecPromptFor(ctx context.Context, pr *PromptRequest, url *url.URL) (*PromptResponse, error) {
 	// Get HTML from URL and parse as desired
-	htmlResp, err := c.get(ctx, url)
+	htmlResp, err := httpGet(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching HTML from URL: %w", err)
 	}
@@ -109,10 +112,23 @@ func (c *Client) ExecPromptFor(ctx context.Context, pr *PromptRequest, url *url.
 	return newPromptResponse(resp), nil
 }
 
-func (c *Client) get(ctx context.Context, u *url.URL) (string, error) {
+// ParseSitemapURLs doesn't require any LLM
+func ParseSitemapURLs(ctx context.Context, sitemapURL string) ([]*url.URL, error) {
+	u, err := url.Parse(sitemapURL)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing sitemap URL: %w", err)
+	}
+	sitemapRaw, err := httpGet(ctx, u)
+	if err != nil {
+		return nil, fmt.Errorf("error getting sitemap from URL: %w", err)
+	}
+	return extractUrlSet([]byte(sitemapRaw))
+}
+
+func httpGet(ctx context.Context, u *url.URL) (string, error) {
 	req := &http.Request{Method: http.MethodGet, URL: u}
 	req = req.WithContext(ctx)
-	resp, err := c.httpClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("error on HTTP request: %w", err)
 	}
@@ -125,16 +141,4 @@ func (c *Client) get(ctx context.Context, u *url.URL) (string, error) {
 		return "", err
 	}
 	return string(bs), nil
-}
-
-func (c *Client) parseSitemapURL(ctx context.Context, sitemapURL string) ([]*url.URL, error) {
-	u, err := url.Parse(sitemapURL)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing sitemap URL: %w", err)
-	}
-	sitemapRaw, err := c.get(ctx, u)
-	if err != nil {
-		return nil, fmt.Errorf("error getting sitemap from URL: %w", err)
-	}
-	return extractUrlSet([]byte(sitemapRaw))
 }
