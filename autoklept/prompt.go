@@ -1,11 +1,9 @@
-//go:generate stringer -type=PromptOutputTag,PromptInputTag -linecomment -output prompt_tag_string.go
 package autoklept
 
 import (
 	"bytes"
 	"github.com/cohesion-org/deepseek-go"
 	"github.com/cohesion-org/deepseek-go/constants"
-	"strings"
 )
 
 type PromptResponse struct {
@@ -29,35 +27,26 @@ type PromptRequestInput struct {
 }
 
 type PromptRequest struct {
-	systemRole strings.Builder
-	prompt     strings.Builder
+	systemRole string
+	prompt     string
 	nodeFinder *ElementNodeFinder
-	ccr        *deepseek.ChatCompletionRequest
+	ccr        deepseek.ChatCompletionRequest
 }
 
 func (pr *PromptRequest) SystemRole() string {
-	return pr.systemRole.String()
+	return pr.systemRole
 }
 
 func (pr *PromptRequest) Prompt() string {
-	return pr.prompt.String()
+	return pr.prompt
 }
 
 func (pr *PromptRequest) setPromptWithBytes(bs *bytes.Buffer) {
-	p := strings.Builder{}
-	p.WriteString(pr.prompt.String())
-	p.WriteString("\n")
-	p.WriteString(bs.String())
-	pm := deepseek.ChatCompletionMessage{Role: constants.ChatMessageRoleUser, Content: p.String()}
+	p := pr.prompt + "\n" + bs.String()
+	pm := deepseek.ChatCompletionMessage{Role: constants.ChatMessageRoleUser, Content: p}
 	pr.ccr.Messages = append(pr.ccr.Messages, pm)
 }
 
-func buildPromptString(input PromptInputTag, output PromptOutputTag) strings.Builder {
-	var sb strings.Builder
-	_, _ = sb.WriteString(deepseekStdPrompt)
-	sb.WriteString("\n")
-	_, _ = sb.WriteString(getInputTagText(input))
-	sb.WriteString("\n")
-	_, _ = sb.WriteString(getOutputTagText(output))
-	return sb
+func buildPromptString(input PromptInputTag, output PromptOutputTag) string {
+	return deepseekStdPrompt + "\n" + getInputTagText(input) + "\n" + getOutputTagText(output)
 }

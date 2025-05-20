@@ -11,11 +11,12 @@ func _() {
 	_ = x[PromptOutputText-0]
 	_ = x[PromptOutputMarkdown-1]
 	_ = x[PromptOutputSimple-2]
+	_ = x[PromptOutputHugo-3]
 }
 
-const _PromptOutputTag_name = "TextMarkdownSimple"
+const _PromptOutputTag_name = "TextMarkdownSimpleHugo"
 
-var _PromptOutputTag_index = [...]uint8{0, 4, 12, 18}
+var _PromptOutputTag_index = [...]uint8{0, 4, 12, 18, 22}
 
 func (i PromptOutputTag) String() string {
 	if i < 0 || i >= PromptOutputTag(len(_PromptOutputTag_index)-1) {

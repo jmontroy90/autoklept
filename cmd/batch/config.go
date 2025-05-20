@@ -18,11 +18,12 @@ var (
 )
 
 type Config struct {
-	Client ClientConfig `conf:"help:Config for autoklept client"`
-	Source SourceOpts   `conf:"help:Options for where to get raw input data for parsing"`
-	Html   HTMLOpts     `conf:"help:Options for how to parse HTML before LLM analysis"`
-	Prompt PromptOpts   `conf:"help:Options for how to prompt DeepSeek to parse content"`
-	Output OutputConfig `conf:"help:How to output and save parsed content"`
+	Client  ClientConfig `conf:"help:Config for autoklept client"`
+	Source  SourceOpts   `conf:"help:Options for where to get raw input data for parsing"`
+	Html    HTMLOpts     `conf:"help:Options for how to parse HTML before LLM analysis"`
+	Prompt  PromptOpts   `conf:"help:Options for how to prompt DeepSeek to parse content"`
+	Output  OutputConfig `conf:"help:How to output and save parsed content"`
+	NumJobs int          `conf:"default:1,flag:jobs,short:j,help:Number of parallel autoklept jobs to run"`
 }
 
 func (c Config) ToAutokleptConfig() *autoklept.Config {

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"golang.org/x/net/html"
-	"strings"
 )
 
 // ElementNodeFinder lets the user specify a particular tag to start parsing from, instead of just parsing the whole input.
@@ -15,8 +14,8 @@ type ElementNodeFinder struct {
 	AttrVal string
 }
 
-func parseHtmlByTag(htmlBody string, lookup *ElementNodeFinder) (*bytes.Buffer, error) {
-	doc, err := html.Parse(strings.NewReader(htmlBody))
+func parseHtmlByTag(htmlBody []byte, lookup *ElementNodeFinder) (*bytes.Buffer, error) {
+	doc, err := html.Parse(bytes.NewReader(htmlBody))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing html: %w", err)
 	}
@@ -27,7 +26,7 @@ func parseHtmlByTag(htmlBody string, lookup *ElementNodeFinder) (*bytes.Buffer, 
 			return nil, fmt.Errorf("error rendering html: %w", err)
 		}
 	} else {
-		buf.WriteString(htmlBody)
+		buf.Write(htmlBody)
 	}
 	return &buf, nil
 }

@@ -86,7 +86,7 @@ func (r *cmdRunner) execSitemapCmd(ctx context.Context, cmd *cli.Command) error 
 		return err
 	}
 	for _, u := range us {
-		fmt.Printf("%s\n", u)
+		fmt.Printf("%v\n", u)
 	}
 	return nil
 }
@@ -106,12 +106,13 @@ func (r *cmdRunner) execExtractCmd(ctx context.Context, cmd *cli.Command) error 
 	// TODO: configurable + HTMLFinders
 	// TODO: no elementnodefinder, use CSS selectors that user can specify, you parse, does same shit!
 	// .div[id="SITE_CONTAINER"]
-	pri := autoklept.PromptRequestInput{InputTag: "blog", OutputTag: "markdown", HTMLFinder: &autoklept.ElementNodeFinder{"div", "id", "SITE_CONTAINER"}}
+	finder := &autoklept.ElementNodeFinder{Tag: "div", AttrKey: "id", AttrVal: "SITE_CONTAINER"}
+	pri := autoklept.PromptRequestInput{InputTag: "blog", OutputTag: "markdown", HTMLFinder: finder}
 	pr, err := c.NewPromptRequest(ctx, &pri)
 	if err != nil {
 		return err
 	}
-	prsp, err := c.ExecPromptFor(ctx, pr, target)
+	prsp, err := c.ExecPromptFor(ctx, pr, target.String())
 	if err != nil {
 		return err
 	}

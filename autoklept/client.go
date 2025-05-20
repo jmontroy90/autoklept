@@ -1,6 +1,5 @@
 package autoklept
 
-import "C"
 import (
 	"context"
 	"errors"
@@ -8,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/cohesion-org/deepseek-go"
@@ -46,19 +44,19 @@ func WithTimeout(timeout time.Duration) ClientOption {
 	}
 }
 
-func (c *Client) BuildURLs(ctx context.Context, sourceURLs, sitemapURLs []string) ([]*url.URL, error) {
-	var urls []*url.URL
+func (c *Client) BuildURLs(ctx context.Context, sourceURLs, sitemapURLs []string) ([]url.URL, error) {
+	var urls []url.URL
 	for _, uStr := range sourceURLs {
 		u, err := url.Parse(uStr)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing source URL: %w", err)
 		}
-		urls = append(urls, u)
+		urls = append(urls, *u)
 	}
 	for _, smUrl := range sitemapURLs {
 		found, err := ParseSitemapURLs(ctx, smUrl)
 		if err != nil {
-			return nil, fmt.Errorf("")
+			return nil, fmt.Errorf("error parsing sitemap URL: %w", err)
 		}
 		urls = append(urls, found...)
 	}
@@ -77,25 +75,35 @@ func (c *Client) NewPromptRequest(ctx context.Context, reqInput *PromptRequestIn
 	// This does not have the input HTML attached to it yet
 	// The PromptRequest might be the same other than that HTML, so we need only make one.
 	// This is meant to capture autoklept's best practices for how to query DeepSeek for best extraction.
-	ccr := &deepseek.ChatCompletionRequest{
+	ccr := deepseek.ChatCompletionRequest{
 		// This actually perform better than the deepseek-reasoner at clean extraction. Hilarious.
 		Model:    deepseek.DeepSeekChat,
 		Messages: []deepseek.ChatCompletionMessage{{Role: constants.ChatMessageRoleSystem, Content: deepseekSystemRole}},
 	}
-	sys := strings.Builder{}
-	sys.WriteString(deepseekSystemRole)
+	var nf *ElementNodeFinder
+	if reqInput.HTMLFinder != nil {
+		nf = &ElementNodeFinder{
+			Tag:     reqInput.HTMLFinder.Tag,
+			AttrKey: reqInput.HTMLFinder.AttrKey,
+			AttrVal: reqInput.HTMLFinder.AttrVal,
+		}
+	}
 	return &PromptRequest{
 		prompt:     buildPromptString(in, out),
-		systemRole: sys,
+		systemRole: deepseekSystemRole,
 		ccr:        ccr,
-		nodeFinder: reqInput.HTMLFinder,
+		nodeFinder: nf,
 	}, nil
 }
 
 // ExecPromptFor executes the given prompt request for the parsed content found at `url`.
-func (c *Client) ExecPromptFor(ctx context.Context, pr *PromptRequest, url *url.URL) (*PromptResponse, error) {
+func (c *Client) ExecPromptFor(ctx context.Context, pr *PromptRequest, u string) (*PromptResponse, error) {
+	uParsed, err := url.Parse(u)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing sitemap URL: %w", err)
+	}
 	// Get HTML from URL and parse as desired
-	htmlResp, err := httpGet(ctx, url)
+	htmlResp, err := httpGet(ctx, uParsed)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching HTML from URL: %w", err)
 	}
@@ -105,7 +113,7 @@ func (c *Client) ExecPromptFor(ctx context.Context, pr *PromptRequest, url *url.
 		return nil, fmt.Errorf("error parsing HTML: %w", err)
 	}
 	pr.setPromptWithBytes(parsedHtml)
-	resp, err := c.deepseek.CreateChatCompletion(ctx, pr.ccr)
+	resp, err := c.deepseek.CreateChatCompletion(ctx, &pr.ccr)
 	if err != nil {
 		return nil, fmt.Errorf("error querying DeepSeek: %w", err)
 	}
@@ -113,7 +121,7 @@ func (c *Client) ExecPromptFor(ctx context.Context, pr *PromptRequest, url *url.
 }
 
 // ParseSitemapURLs doesn't require any LLM
-func ParseSitemapURLs(ctx context.Context, sitemapURL string) ([]*url.URL, error) {
+func ParseSitemapURLs(ctx context.Context, sitemapURL string) ([]url.URL, error) {
 	u, err := url.Parse(sitemapURL)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing sitemap URL: %w", err)
@@ -122,23 +130,23 @@ func ParseSitemapURLs(ctx context.Context, sitemapURL string) ([]*url.URL, error
 	if err != nil {
 		return nil, fmt.Errorf("error getting sitemap from URL: %w", err)
 	}
-	return extractUrlSet([]byte(sitemapRaw))
+	return extractUrlSet(sitemapRaw)
 }
 
-func httpGet(ctx context.Context, u *url.URL) (string, error) {
-	req := &http.Request{Method: http.MethodGet, URL: u}
+func httpGet(ctx context.Context, u *url.URL) ([]byte, error) {
+	req := &http.Request{URL: u, Method: http.MethodGet}
 	req = req.WithContext(ctx)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("error on HTTP request: %w", err)
+		return nil, fmt.Errorf("error on HTTP request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", ErrNon200ResponseCode
+		return nil, ErrNon200ResponseCode
 	}
 	bs, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return string(bs), nil
+	return bs, nil
 }

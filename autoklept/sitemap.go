@@ -25,18 +25,18 @@ type singleURL struct {
 	LastMod string `xml:"lastmod"`
 }
 
-func extractUrlSet(raw []byte) ([]*url.URL, error) {
+func extractUrlSet(raw []byte) ([]url.URL, error) {
 	var us urlSet
 	if err := xml.Unmarshal(raw, &us); err != nil {
 		return nil, fmt.Errorf("error unmarshaling sitemap: %w", err)
 	}
-	var urls []*url.URL
+	var urls []url.URL
 	for _, u := range us.URLs {
 		up, err := url.Parse(u.Loc)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sitemap url %s: %w", u.Loc, err)
 		}
-		urls = append(urls, up)
+		urls = append(urls, *up)
 	}
 	return urls, nil
 }
